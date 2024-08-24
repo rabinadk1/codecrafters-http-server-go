@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 )
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, directory string) {
 	defer conn.Close()
 
 	fmt.Printf("Accepted connection for %s\n", conn.RemoteAddr())
@@ -32,13 +33,9 @@ func handleConnection(conn net.Conn) {
 
 	requestTarget := headerParts[1]
 
-	var response string
+	response := "HTTP/1.1 404 Not Found\r\n\r\n"
 	if requestTarget == "/" {
 		response = "HTTP/1.1 200 OK\r\n\r\n"
-	} else if strings.HasPrefix(requestTarget, "/echo/") {
-		echoBody := strings.TrimPrefix(requestTarget, "/echo/")
-		contentLength := len(echoBody)
-		response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, echoBody)
 	} else if requestTarget == "/user-agent" {
 		const userAgentPrefix = "User-Agent: "
 		userAgentIndex := strings.Index(stringBuffer, userAgentPrefix)
@@ -56,8 +53,20 @@ func handleConnection(conn net.Conn) {
 		userAgent := remString[:rnIndex]
 		response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(userAgent), userAgent)
 
-	} else {
-		response = "HTTP/1.1 404 Not Found\r\n\r\n "
+	} else if prefix := "/echo/"; strings.HasPrefix(requestTarget, prefix) {
+		echoBody := strings.TrimPrefix(requestTarget, prefix)
+		contentLength := len(echoBody)
+		response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, echoBody)
+	} else if prefix := "/files/"; strings.HasPrefix(requestTarget, prefix) {
+		fileName := strings.TrimPrefix(requestTarget, prefix)
+		filePath := directory + "/" + fileName
+
+		fileContent, err := os.ReadFile(filePath)
+		if err != nil {
+			fmt.Printf("File Not Found: %s", err)
+		} else {
+			response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", len(fileContent), string(fileContent))
+		}
 	}
 
 	_, err = conn.Write([]byte(response))
@@ -68,6 +77,14 @@ func handleConnection(conn net.Conn) {
 }
 
 func main() {
+	directory := "."
+	if len(os.Args) > 1 && os.Args[1] == "--directory" {
+		if len(os.Args) < 3 {
+			log.Fatalln("Usage: ./http_server --directory <directory>")
+		}
+		directory = strings.TrimRight(os.Args[2], "/")
+	}
+
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		log.Fatalln("Failed to bind to port 4221")
@@ -83,7 +100,7 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn)
+		go handleConnection(conn, directory)
 
 	}
 }
