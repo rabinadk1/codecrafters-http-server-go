@@ -10,7 +10,7 @@ import (
 func getHeaderValue(headerName string, stringBuffer string) (string, error) {
 	contentTypeIndex := strings.Index(stringBuffer, headerName)
 	if contentTypeIndex == -1 {
-		return "", fmt.Errorf("Could not find Content-Type in request: %s\n", stringBuffer)
+		return "", fmt.Errorf("Could not find %s in request: %s\n", headerName, stringBuffer)
 	}
 
 	remString := stringBuffer[contentTypeIndex+len(headerName):]
@@ -48,6 +48,7 @@ func compressGZIP(content []byte) (bytes.Buffer, error) {
 		return buffer, err
 	}
 
+	// Close early because the buffer may not have written
 	err = w.Close()
 
 	return buffer, err
