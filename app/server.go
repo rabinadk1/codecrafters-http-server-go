@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -14,7 +15,7 @@ func handleConnection(conn net.Conn, directory string) {
 	fmt.Printf("Accepted connection for %s\n", conn.RemoteAddr())
 
 	// Buffer to read from the connection
-	buffer := make([]byte, 1204)
+	buffer := make([]byte, 1024)
 
 	n, err := conn.Read(buffer)
 	if err != nil {
@@ -31,7 +32,7 @@ func handleConnection(conn net.Conn, directory string) {
 		return
 	}
 
-	requestTarget := headerParts[1]
+	requestMethod, requestTarget := headerParts[0], headerParts[1]
 
 	response := "HTTP/1.1 404 Not Found\r\n\r\n"
 	if requestTarget == "/" {
@@ -41,6 +42,7 @@ func handleConnection(conn net.Conn, directory string) {
 		userAgentIndex := strings.Index(stringBuffer, userAgentPrefix)
 		if userAgentIndex == -1 {
 			fmt.Printf("Could not find User-Agent in request: %s\n", stringBuffer)
+			return
 		}
 
 		remString := stringBuffer[userAgentIndex+len(userAgentPrefix):]
@@ -48,6 +50,7 @@ func handleConnection(conn net.Conn, directory string) {
 		rnIndex := strings.Index(remString, "\r\n")
 		if rnIndex == -1 {
 			fmt.Printf("Could not find \\r\\n in request: %s\n", stringBuffer)
+			return
 		}
 
 		userAgent := remString[:rnIndex]
@@ -61,11 +64,55 @@ func handleConnection(conn net.Conn, directory string) {
 		fileName := strings.TrimPrefix(requestTarget, prefix)
 		filePath := directory + "/" + fileName
 
-		fileContent, err := os.ReadFile(filePath)
-		if err != nil {
-			fmt.Printf("File Not Found: %s", err)
+		if requestMethod == "POST" {
+			const contentTypePrefix = "Content-Length: "
+			contentTypeIndex := strings.Index(stringBuffer, contentTypePrefix)
+			if contentTypeIndex == -1 {
+				fmt.Printf("Could not find Content-Type in request: %s\n", stringBuffer)
+			}
+
+			remString := stringBuffer[contentTypeIndex+len(contentTypePrefix):]
+
+			rnIndex := strings.Index(remString, "\r\n")
+			if rnIndex == -1 {
+				fmt.Printf("Could not find \\r\\n in request: %s\n", stringBuffer)
+				return
+			}
+
+			contentLength, err := strconv.Atoi(remString[:rnIndex])
+			if err != nil {
+				fmt.Printf("Could not convert content length to integer from request: %s\n", stringBuffer)
+				return
+			}
+
+			const headerBodySeperator = "\r\n\r\n"
+			headerBodySeperatorIndex := strings.Index(remString, headerBodySeperator)
+			if headerBodySeperatorIndex == -1 {
+				fmt.Printf("Could not find \\r\\n\\r\\n in request: %s\n", stringBuffer)
+				return
+			}
+
+			body := remString[headerBodySeperatorIndex+len(headerBodySeperator):]
+
+			if contentLength != len(body) {
+				fmt.Printf("Content-Length (%d) did not match body length: %d\n", contentLength, len(body))
+				return
+			}
+
+			if err := os.WriteFile(filePath, []byte(body), 0644); err != nil {
+				fmt.Printf("Could not write to file: %s\n", err)
+				return
+			}
+
+			response = "HTTP/1.1 201 Created\r\n\r\n"
+
 		} else {
-			response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", len(fileContent), string(fileContent))
+			fileContent, err := os.ReadFile(filePath)
+			if err != nil {
+				fmt.Printf("File Not Found: %s", err)
+			} else {
+				response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", len(fileContent), string(fileContent))
+			}
 		}
 	}
 
