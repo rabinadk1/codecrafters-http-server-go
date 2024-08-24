@@ -20,3 +20,19 @@ func getHeaderValue(headerName string, stringBuffer string) (string, error) {
 
 	return remString[:rnIndex], nil
 }
+
+func checkIfGZIPAccepted(stringBuffer string) bool {
+	const acceptEncodingPrefix = "Accept-Encoding: "
+	acceptEncodingHeader, err := getHeaderValue(acceptEncodingPrefix, stringBuffer)
+	if err != nil {
+		return false
+	}
+
+	for _, acceptEncoder := range strings.Split(acceptEncodingHeader, ", ") {
+		if acceptEncoder == "gzip" {
+			return true
+		}
+	}
+
+	return false
+}

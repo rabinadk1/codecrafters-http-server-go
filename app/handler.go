@@ -98,11 +98,8 @@ func handleConnection(conn net.Conn, directory string) {
 			return
 		}
 	} else if prefix := "/echo/"; strings.HasPrefix(requestTarget, prefix) {
-		const acceptEncodingPrefix = "Accept-Encoding: "
-		acceptEncoding, err := getHeaderValue(acceptEncodingPrefix, stringBuffer)
-
 		var contentEncodingHeader string
-		if err == nil && acceptEncoding == "gzip" {
+		if checkIfGZIPAccepted(stringBuffer) {
 			contentEncodingHeader = "Content-Encoding: gzip\r\n"
 		}
 
