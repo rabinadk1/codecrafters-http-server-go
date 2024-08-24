@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"strings"
 )
@@ -21,7 +23,7 @@ func getHeaderValue(headerName string, stringBuffer string) (string, error) {
 	return remString[:rnIndex], nil
 }
 
-func checkIfGZIPAccepted(stringBuffer string) bool {
+func ifGZIPAccepted(stringBuffer string) bool {
 	const acceptEncodingPrefix = "Accept-Encoding: "
 	acceptEncodingHeader, err := getHeaderValue(acceptEncodingPrefix, stringBuffer)
 	if err != nil {
@@ -35,4 +37,18 @@ func checkIfGZIPAccepted(stringBuffer string) bool {
 	}
 
 	return false
+}
+
+func compressGZIP(content []byte) (bytes.Buffer, error) {
+	var buffer bytes.Buffer
+	w := gzip.NewWriter(&buffer)
+
+	_, err := w.Write(content)
+	if err != nil {
+		return buffer, err
+	}
+
+	err = w.Close()
+
+	return buffer, err
 }

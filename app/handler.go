@@ -66,8 +66,6 @@ func handleFiles(requestMethod string, stringBuffer string, filePath string) (st
 func handleConnection(conn net.Conn, directory string) {
 	defer conn.Close()
 
-	fmt.Printf("Accepted connection for %s\n", conn.RemoteAddr())
-
 	// Buffer to read from the connection
 	buffer := make([]byte, 1024)
 
@@ -88,6 +86,8 @@ func handleConnection(conn net.Conn, directory string) {
 
 	requestMethod, requestTarget := headerParts[0], headerParts[1]
 
+	fmt.Printf("Accepted %s method for %s from %s\n", requestMethod, requestTarget, conn.RemoteAddr())
+
 	response := "HTTP/1.1 404 Not Found\r\n\r\n"
 	if requestTarget == "/" {
 		response = "HTTP/1.1 200 OK\r\n\r\n"
@@ -98,12 +98,19 @@ func handleConnection(conn net.Conn, directory string) {
 			return
 		}
 	} else if prefix := "/echo/"; strings.HasPrefix(requestTarget, prefix) {
+		echoBody := strings.TrimPrefix(requestTarget, prefix)
+
 		var contentEncodingHeader string
-		if checkIfGZIPAccepted(stringBuffer) {
+		if ifGZIPAccepted(stringBuffer) {
 			contentEncodingHeader = "Content-Encoding: gzip\r\n"
+			compresedBody, err := compressGZIP([]byte(echoBody))
+			if err != nil {
+				fmt.Printf("Error compressing gzip: %s\n", err)
+				return
+			}
+			echoBody = compresedBody.String()
 		}
 
-		echoBody := strings.TrimPrefix(requestTarget, prefix)
 		contentLength := len(echoBody)
 		response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n%sContent-Length: %d\r\n\r\n%s", contentEncodingHeader, contentLength, echoBody)
 	} else if prefix := "/files/"; strings.HasPrefix(requestTarget, prefix) {
